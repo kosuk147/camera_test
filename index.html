@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>フォトフレーム撮影 試作版</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: rgba(255,255,255,0.08);
+      --line: rgba(255,255,255,0.16);
+      --text: #f8fafc;
+      --muted: #cbd5e1;
+      --accent: #8b5cf6;
+      --accent2: #06b6d4;
+      --danger: #ef4444;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      background: radial-gradient(circle at top, #1e293b, var(--bg));
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .app {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 18px;
+    }
+
+    .header h1 {
+      margin: 0 0 8px;
+      font-size: clamp(24px, 3vw, 36px);
+    }
+
+    .header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      backdrop-filter: blur(12px);
+      border-radius: 24px;
+      padding: 18px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+    }
+
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    .frame-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .frame-option {
+      cursor: pointer;
+      border-radius: 22px;
+      border: 2px solid transparent;
+      padding: 14px;
+      background: rgba(255,255,255,0.04);
+      transition: .2s ease;
+    }
+
+    .frame-option:hover,
+    .frame-option.selected {
+      transform: translateY(-2px);
+      border-color: rgba(255,255,255,0.45);
+      background: rgba(255,255,255,0.08);
+    }
+
+    .frame-thumb {
+      aspect-ratio: 3 / 4;
+      border-radius: 18px;
+      position: relative;
+      overflow: hidden;
+      background: #111827;
+    }
+
+    .thumb-a {
+      background: linear-gradient(160deg, #ec4899, #8b5cf6 70%, #1d4ed8);
+    }
+
+    .thumb-b {
+      background: linear-gradient(160deg, #0ea5e9, #14b8a6 65%, #f59e0b);
+    }
+
+    .thumb-inner {
+      position: absolute;
+      inset: 18px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.18);
+      border: 4px solid rgba(255,255,255,0.8);
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35);
+    }
+
+    .thumb-label {
+      margin-top: 10px;
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .camera-wrap {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    .preview-shell {
+      position: relative;
+      width: min(100%, 430px);
+      margin: 0 auto;
+      aspect-ratio: 3 / 4;
+      border-radius: 26px;
+      overflow: hidden;
+      background: #020617;
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: 0 16px 36px rgba(0,0,0,0.35);
+    }
+
+    video, canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      background: #000;
+    }
+
+    .frame-overlay {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+    }
+
+    .frame-overlay .outer {
+      position: absolute;
+      inset: 0;
+      border-radius: 26px;
+    }
+
+    .frame-overlay .inner {
+      position: absolute;
+      left: 7%;
+      right: 7%;
+      top: 8%;
+      bottom: 14%;
+      border-radius: 24px;
+      border: 10px solid rgba(255,255,255,0.92);
+      box-shadow: inset 0 0 0 3px rgba(255,255,255,0.42);
+    }
+
+    .frame-overlay .title,
+    .frame-overlay .footer {
+      position: absolute;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: white;
+      text-shadow: 0 2px 6px rgba(0,0,0,.35);
+      font-weight: 800;
+      letter-spacing: .06em;
+    }
+
+    .frame-overlay .title {
+      top: 18px;
+      font-size: clamp(18px, 4vw, 26px);
+    }
+
+    .frame-overlay .footer {
+      bottom: 22px;
+      font-size: clamp(12px, 2.8vw, 16px);
+    }
+
+    .frame-a .outer {
+      background: linear-gradient(165deg, rgba(236,72,153,.78), rgba(139,92,246,.82) 65%, rgba(37,99,235,.85));
+    }
+
+    .frame-b .outer {
+      background: linear-gradient(165deg, rgba(14,165,233,.82), rgba(20,184,166,.82) 60%, rgba(245,158,11,.78));
+    }
+
+    .controls,
+    .footer-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 16px;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 14px 20px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: .18s ease;
+    }
+
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+    .primary { background: white; color: #0f172a; }
+    .secondary { background: rgba(255,255,255,0.12); color: white; border: 1px solid rgba(255,255,255,0.12); }
+    .accent { background: linear-gradient(90deg, var(--accent), var(--accent2)); color: white; }
+    .danger { background: rgba(239,68,68,.14); color: #fecaca; border: 1px solid rgba(239,68,68,.3); }
+
+    .note {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+      text-align: center;
+    }
+
+    .status {
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 8px;
+      min-height: 22px;
+    }
+
+    .hidden-canvas { display: none; }
+
+    @media (max-width: 640px) {
+      .app { padding: 14px; }
+      .panel { padding: 14px; border-radius: 20px; }
+      button { width: 100%; }
+      .controls, .footer-buttons { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <h1>フォトフレーム撮影 試作版</h1>
+      <p>フレームを選んで撮影 → 確認 → 印刷 / 撮り直し の流れをブラウザだけで試せるサンプルです。</p>
+    </div>
+
+    <div class="panel">
+      <section id="screen-select" class="screen active">
+        <h2>1. フォトフレームを選択</h2>
+        <div class="frame-grid">
+          <div class="frame-option selected" data-frame="frameA">
+            <div class="frame-thumb thumb-a">
+              <div class="thumb-inner"></div>
+            </div>
+            <div class="thumb-label">フレーム A（ピンク / パープル）</div>
+          </div>
+          <div class="frame-option" data-frame="frameB">
+            <div class="frame-thumb thumb-b">
+              <div class="thumb-inner"></div>
+            </div>
+            <div class="thumb-label">フレーム B（ブルー / ゴールド）</div>
+          </div>
+        </div>
+        <div class="footer-buttons">
+          <button class="accent" id="startCameraBtn">このフレームで撮影する</button>
+        </div>
+      </section>
+
+      <section id="screen-camera" class="screen">
+        <h2>2. 撮影</h2>
+        <div class="camera-wrap">
+          <div class="preview-shell">
+            <video id="video" playsinline autoplay muted></video>
+            <div id="liveOverlay" class="frame-overlay frame-a">
+              <div class="outer"></div>
+              <div class="inner"></div>
+              <div class="title">PHOTO FRAME</div>
+              <div class="footer">SAMPLE EVENT</div>
+            </div>
+          </div>
+          <div class="controls">
+            <button class="primary" id="captureBtn">撮影する</button>
+            <button class="secondary" id="backToSelectBtn">フレームを選び直す</button>
+          </div>
+          <div class="status" id="cameraStatus"></div>
+        </div>
+      </section>
+
+      <section id="screen-result" class="screen">
+        <h2>3. 画像確認</h2>
+        <div class="preview-shell">
+          <canvas id="resultCanvas"></canvas>
+        </div>
+        <div class="controls">
+          <button class="accent" id="printBtn">印刷する</button>
+          <button class="secondary" id="retakeBtn">撮り直す</button>
+          <button class="danger" id="restartBtn">最初に戻る</button>
+        </div>
+        <p class="note">※ 印刷は使用端末・ブラウザ・接続プリンターの仕様に影響されます。現場運用前に必ず実機確認してください。</p>
+      </section>
+    </div>
+
+    <canvas id="captureCanvas" class="hidden-canvas" width="1200" height="1600"></canvas>
+  </div>
+
+  <script>
+    const screenSelect = document.getElementById('screen-select');
+    const screenCamera = document.getElementById('screen-camera');
+    const screenResult = document.getElementById('screen-result');
+    const frameOptions = document.querySelectorAll('.frame-option');
+    const startCameraBtn = document.getElementById('startCameraBtn');
+    const backToSelectBtn = document.getElementById('backToSelectBtn');
+    const captureBtn = document.getElementById('captureBtn');
+    const retakeBtn = document.getElementById('retakeBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const printBtn = document.getElementById('printBtn');
+    const video = document.getElementById('video');
+    const liveOverlay = document.getElementById('liveOverlay');
+    const resultCanvas = document.getElementById('resultCanvas');
+    const captureCanvas = document.getElementById('captureCanvas');
+    const cameraStatus = document.getElementById('cameraStatus');
+
+    let selectedFrame = 'frameA';
+    let stream = null;
+
+    const frameSettings = {
+      frameA: {
+        className: 'frame-a',
+        title: 'PHOTO FRAME',
+        footer: 'SAMPLE EVENT',
+        colors: ['#ec4899', '#8b5cf6', '#2563eb']
+      },
+      frameB: {
+        className: 'frame-b',
+        title: 'SPECIAL PHOTO',
+        footer: 'LIMITED FRAME',
+        colors: ['#0ea5e9', '#14b8a6', '#f59e0b']
+      }
+    };
+
+    function showScreen(target) {
+      [screenSelect, screenCamera, screenResult].forEach(el => el.classList.remove('active'));
+      target.classList.add('active');
+    }
+
+    function updateOverlay() {
+      const frame = frameSettings[selectedFrame];
+      liveOverlay.className = `frame-overlay ${frame.className}`;
+      liveOverlay.querySelector('.title').textContent = frame.title;
+      liveOverlay.querySelector('.footer').textContent = frame.footer;
+    }
+
+    async function startCamera() {
+      try {
+        stopCamera();
+        cameraStatus.textContent = 'カメラを起動しています…';
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 1080 },
+            height: { ideal: 1440 }
+          },
+          audio: false
+        });
+        video.srcObject = stream;
+        await video.play();
+        cameraStatus.textContent = 'カメラ準備完了';
+        showScreen(screenCamera);
+      } catch (error) {
+        console.error(error);
+        cameraStatus.textContent = 'カメラを起動できませんでした。HTTPS環境・カメラ権限・対応ブラウザを確認してください。';
+        showScreen(screenCamera);
+      }
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      video.srcObject = null;
+    }
+
+    function drawRoundedRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function capturePhoto() {
+      if (!video.videoWidth || !video.videoHeight) {
+        cameraStatus.textContent = '映像がまだ準備できていません。少し待ってから再度お試しください。';
+        return;
+      }
+
+      const frame = frameSettings[selectedFrame];
+      const ctx = captureCanvas.getContext('2d');
+      const W = captureCanvas.width;
+      const H = captureCanvas.height;
+
+      ctx.clearRect(0, 0, W, H);
+
+      const scale = Math.max(W / video.videoWidth, H / video.videoHeight);
+      const dw = video.videoWidth * scale;
+      const dh = video.videoHeight * scale;
+      const dx = (W - dw) / 2;
+      const dy = (H - dh) / 2;
+
+      ctx.save();
+      ctx.translate(W, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, -dx - dw, dy, dw, dh);
+      ctx.restore();
+
+      const grad = ctx.createLinearGradient(0, 0, W, H);
+      grad.addColorStop(0, frame.colors[0]);
+      grad.addColorStop(0.6, frame.colors[1]);
+      grad.addColorStop(1, frame.colors[2]);
+      ctx.fillStyle = grad;
+      ctx.globalAlpha = 0.78;
+      drawRoundedRect(ctx, 0, 0, W, H, 72);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      const innerX = W * 0.07;
+      const innerY = H * 0.08;
+      const innerW = W * 0.86;
+      const innerH = H * 0.78;
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+      ctx.lineWidth = 22;
+      drawRoundedRect(ctx, innerX, innerY, innerW, innerH, 54);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 6;
+      drawRoundedRect(ctx, innerX + 14, innerY + 14, innerW - 28, innerH - 28, 42);
+      ctx.stroke();
+
+      ctx.fillStyle = 'white';
+      ctx.textAlign = 'center';
+      ctx.shadowColor = 'rgba(0,0,0,0.35)';
+      ctx.shadowBlur = 10;
+
+      ctx.font = 'bold 56px sans-serif';
+      ctx.fillText(frame.title, W / 2, 90);
+
+      ctx.font = 'bold 32px sans-serif';
+      ctx.fillText(frame.footer, W / 2, H - 58);
+
+      ctx.shadowBlur = 0;
+
+      const resultCtx = resultCanvas.getContext('2d');
+      resultCanvas.width = W;
+      resultCanvas.height = H;
+      resultCtx.clearRect(0, 0, W, H);
+      resultCtx.drawImage(captureCanvas, 0, 0);
+
+      showScreen(screenResult);
+    }
+
+    function printPhoto() {
+      const dataUrl = resultCanvas.toDataURL('image/png');
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('印刷ウィンドウを開けませんでした。ポップアップブロックを確認してください。');
+        return;
+      }
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html lang="ja">
+        <head>
+          <meta charset="UTF-8" />
+          <title>Print</title>
+          <style>
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: white;
+            }
+            body {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-height: 100vh;
+            }
+            img {
+              width: 100%;
+              max-width: 148mm;
+              height: auto;
+              display: block;
+            }
+            @page { size: auto; margin: 8mm; }
+          </style>
+        </head>
+        <body>
+          <img src="${dataUrl}" alt="print image" />
+          <script>
+            window.onload = function () {
+              setTimeout(function () {
+                window.print();
+              }, 250);
+            };
+          <\/script>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+
+    frameOptions.forEach(option => {
+      option.addEventListener('click', () => {
+        frameOptions.forEach(el => el.classList.remove('selected'));
+        option.classList.add('selected');
+        selectedFrame = option.dataset.frame;
+        updateOverlay();
+      });
+    });
+
+    startCameraBtn.addEventListener('click', async () => {
+      updateOverlay();
+      await startCamera();
+    });
+
+    backToSelectBtn.addEventListener('click', () => {
+      stopCamera();
+      showScreen(screenSelect);
+    });
+
+    captureBtn.addEventListener('click', capturePhoto);
+
+    retakeBtn.addEventListener('click', async () => {
+      updateOverlay();
+      await startCamera();
+    });
+
+    restartBtn.addEventListener('click', () => {
+      stopCamera();
+      showScreen(screenSelect);
+    });
+
+    printBtn.addEventListener('click', printPhoto);
+
+    window.addEventListener('beforeunload', stopCamera);
+
+    updateOverlay();
+  </script>
+</body>
+</html>
